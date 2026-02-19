@@ -1,0 +1,424 @@
+openapi: 3.0.3
+info:
+  title: Ledger Proof API
+  description: API for managing ledger records with specific support for Invoices and Generic Business Data.
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8080
+    description: Local Development Server
+
+# ----------------------------------------------------------------
+# GLOBAL SECURITY REQUIREMENT
+# Clients must provide EITHER a Bearer Token OR an API Key
+# ----------------------------------------------------------------
+security:
+  - bearerAuth: []
+  - apiKey: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      # Optional: You might want to disable auth for health checks
+      security: [] 
+      operationId: checkHealth
+      responses:
+        "200":
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "UP"
+
+  # ----------------------------------------------------------------
+  # 1. CREATE: GENERIC BUSINESS DATA
+  # ----------------------------------------------------------------
+  /records/business-data:
+    post:
+      summary: Create a record with generic business data
+      description: Creates a new ledger record containing arbitrary JSON data.
+      operationId: createBusinessDataRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBusinessDataRequest"
+      responses:
+        "201":
+          description: Record created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Record already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ----------------------------------------------------------------
+  # 2. CREATE: INVOICE
+  # ----------------------------------------------------------------
+  /records/invoice:
+    post:
+      summary: Create an Invoice record
+      description: Creates a new ledger record specifically for storing an XML invoice.
+      operationId: createInvoiceRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceRequest"
+      responses:
+        "201":
+          description: Invoice record created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Record already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ----------------------------------------------------------------
+  # 3. READ: COMMON
+  # ----------------------------------------------------------------
+  /records/{recordId}:
+    get:
+      summary: Get a ledger record by ID
+      operationId: getRecord
+      parameters:
+        - name: recordId
+          in: path
+          required: true
+          description: The unique ID of the ledger record
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Record found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ----------------------------------------------------------------
+  # 4. UPDATE: GENERIC BUSINESS DATA
+  # ----------------------------------------------------------------
+  /records/{recordId}/business-data:
+    put:
+      summary: Update business data of a generic record
+      operationId: updateBusinessData
+      parameters:
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBusinessDataRequest"
+      responses:
+        "200":
+          description: Record updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ----------------------------------------------------------------
+  # 5. UPDATE: INVOICE
+  # ----------------------------------------------------------------
+  /records/{recordId}/invoice:
+    put:
+      summary: Update an existing Invoice record
+      operationId: updateInvoiceRecord
+      parameters:
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInvoiceRequest"
+      responses:
+        "200":
+          description: Invoice updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ----------------------------------------------------------------
+  # 6. HISTORY
+  # ----------------------------------------------------------------
+  /records/{recordId}/history:
+    get:
+      summary: Get history of a record
+      operationId: getRecordHistory
+      parameters:
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: History entries retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HistoryEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+components:
+  # ----------------------------------------------------------------
+  # SECURITY SCHEMES DEFINITION
+  # ----------------------------------------------------------------
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT Authorization header using the Bearer scheme. Example: 'Authorization: Bearer {token}'"
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+      description: "API Key Authentication. Example: 'X-API-KEY: {key}'"
+
+  responses:
+    BadRequest:
+      description: Bad Request (Invalid input)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Unauthorized (Missing or invalid identity)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Forbidden (Record locked or permission denied)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: "Invalid JSON format"
+
+    Actor:
+      type: object
+      required:
+        - orgMsp
+        - userId
+      properties:
+        orgMsp:
+          type: string
+        userId:
+          type: string
+
+    Status:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          example: "CREATED"
+        note:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+
+    LedgerRecord:
+      type: object
+      required:
+        - recordId
+        - docType
+        - actor
+        - status
+      properties:
+        docType:
+          type: string
+          readOnly: true
+          example: "LedgerRecord"
+        recordId:
+          type: string
+        actor:
+          $ref: "#/components/schemas/Actor"
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        businessData:
+          type: object
+          additionalProperties: true
+          description: Can be generic JSON or InvoiceData structure
+        status:
+          $ref: "#/components/schemas/Status"
+        locked:
+          type: boolean
+        lockedAt:
+          type: string
+          format: date-time
+        lockPolicyId:
+          type: string
+        policyVersion:
+          type: integer
+
+    HistoryEntry:
+      type: object
+      properties:
+        txId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        value:
+          $ref: "#/components/schemas/LedgerRecord"
+        isDelete:
+          type: boolean
+
+    # --- Request Schemas ---
+
+    CreateBusinessDataRequest:
+      type: object
+      required:
+        - recordId
+        - businessData
+      properties:
+        recordId:
+          type: string
+          example: "REC-001"
+        businessData:
+          type: object
+          additionalProperties: true
+          description: Arbitrary JSON data
+          example: { "shipmentId": "SH-99", "weight": 500 }
+
+    CreateInvoiceRequest:
+      type: object
+      required:
+        - recordId
+        - filename
+        - xmlBase64
+      properties:
+        recordId:
+          type: string
+          example: "INV-2023-001"
+        filename:
+          type: string
+          example: "invoice.xml"
+        xmlBase64:
+          type: string
+          description: Base64 encoded XML content
+          example: "PD94bWwgdmVyc2lvbj0iMS4wIj8+CjxpbnZvaWNlPgogIDxpZD4xMjM8L2lkPgo8L2ludm9pY2U+"
+
+    UpdateBusinessDataRequest:
+      type: object
+      required:
+        - businessData
+      properties:
+        businessData:
+          type: object
+          additionalProperties: true
+          description: The new business data to replace the existing data
+
+    UpdateInvoiceRequest:
+      type: object
+      required:
+        - newFilename
+        - newXmlBase64
+      properties:
+        newFilename:
+          type: string
+        newXmlBase64:
+          type: string
