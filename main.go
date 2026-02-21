@@ -123,19 +123,16 @@ func (s *ApiServer) GetRecord(w http.ResponseWriter, r *http.Request, recordId s
 // CreateBusinessDataRecord implements the POST /records/business-data endpoint
 // CreateBusinessDataRecord implements the POST /records/business-data endpoint
 func (s *ApiServer) CreateBusinessDataRecord(w http.ResponseWriter, r *http.Request) {
-	var req api.CreateBusinessDataRequest
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// 1. Decode the incoming request, which should only contain business data.
+	var businessData any
+	if err := json.NewDecoder(r.Body).Decode(&businessData); err != nil {
 		log.Printf("❌ Error decoding JSON: %v", err)
 		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// --- START: MODIFICATION ---
-
-	// 1. Explicitly marshal the BusinessData part into a JSON string.
-	// This ensures we send the exact data type the chaincode expects.
-	businessDataBytes, err := json.Marshal(req.BusinessData)
+	// 2. Marshal the business data back into a JSON string for the chaincode.
+	businessDataBytes, err := json.Marshal(businessData)
 	if err != nil {
 		// This should rarely happen if the initial decoding worked, but it's good practice.
 		log.Printf("❌ Error re-marshaling business data: %v", err)
@@ -146,12 +143,12 @@ func (s *ApiServer) CreateBusinessDataRecord(w http.ResponseWriter, r *http.Requ
 
 	// --- END: MODIFICATION ---
 
-	log.Printf("--> Submitting Transaction: CreateBusinessDataRecord, ID: %s", req.RecordId)
+	log.Printf("--> Submitting Transaction: CreateBusinessDataRecord")
 
-	// 2. Submit the transaction, now passing the explicit JSON string.
-	_, err = s.Contract.SubmitTransaction(
+	// 3. Submit the transaction with the single, correct argument.
+	// The result will be the JSON bytes of the LedgerRecord created by the chaincode.
+	resultBytes, err := s.Contract.SubmitTransaction(
 		"CreateBusinessDataRecord",
-		req.RecordId,
 		businessDataString, // Pass the guaranteed JSON string
 	)
 
@@ -169,14 +166,21 @@ func (s *ApiServer) CreateBusinessDataRecord(w http.ResponseWriter, r *http.Requ
 		}
 		return
 	}
+	// 4. Unmarshal the response from the chaincode to get the new record.
+	var newRecord api.LedgerRecord // Assuming you have this struct defined in your API package
+	if err := json.Unmarshal(resultBytes, &newRecord); err != nil {
+		log.Printf("❌ Error unmarshaling chaincode response: %v", err)
+		http.Error(w, "Failed to parse chaincode response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	log.Printf("<-- Transaction Committed: CreateBusinessDataRecord, ID: %s", req.RecordId)
+	log.Printf("<-- Transaction Committed: CreateBusinessDataRecord, RecordID: %s", newRecord.RecordId)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	response := map[string]string{
 		"message":  "Business data record created successfully",
-		"recordId": req.RecordId,
+		"recordId": newRecord.RecordId,
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("❌ Error encoding response: %v", err)
@@ -260,7 +264,7 @@ func newGrpcConnection(config *Config) *grpc.ClientConn {
 	certPool := x509.NewCertPool()
 	certPool.AddCert(certificate)
 	transportCredentials := credentials.NewClientTLSFromCert(certPool, config.GatewayPeer)
-	connection, err := grpc.Dial(config.PeerEndpoint, grpc.WithTransportCredentials(transportCredentials))
+	connection, err := grpc.NewClient(config.PeerEndpoint, grpc.WithTransportCredentials(transportCredentials))
 	if err != nil {
 		panic(fmt.Errorf("failed to create gRPC connection: %w", err))
 	}

@@ -4,11 +4,18 @@
 package api
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
+	"strings"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/runtime"
 )
@@ -64,7 +71,7 @@ type LedgerRecord struct {
 	DocType       *string                 `json:"docType,omitempty"`
 	LockPolicyId  *string                 `json:"lockPolicyId,omitempty"`
 	Locked        *bool                   `json:"locked,omitempty"`
-	LockedAt      *time.Time              `json:"lockedAt,omitempty"`
+	LockedAt      *string                 `json:"lockedAt,omitempty"`
 	PolicyVersion *int                    `json:"policyVersion,omitempty"`
 	RecordId      string                  `json:"recordId"`
 	Status        Status                  `json:"status"`
@@ -98,11 +105,20 @@ type Forbidden = Error
 // InternalServerError defines model for InternalServerError.
 type InternalServerError = Error
 
+// NotAcceptable defines model for NotAcceptable.
+type NotAcceptable = Error
+
 // NotFound defines model for NotFound.
 type NotFound = Error
 
+// TooManyRequests defines model for TooManyRequests.
+type TooManyRequests = Error
+
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error
+
+// UnsupportedMediaType defines model for UnsupportedMediaType.
+type UnsupportedMediaType = Error
 
 // CreateBusinessDataRecordJSONRequestBody defines body for CreateBusinessDataRecord for application/json ContentType.
 type CreateBusinessDataRecordJSONRequestBody = CreateBusinessDataRequest
@@ -199,6 +215,10 @@ type MiddlewareFunc func(http.Handler) http.Handler
 // CheckHealth operation middleware
 func (siw *ServerInterfaceWrapper) CheckHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	ctx = context.WithValue(ctx, ApiKeyScopes, []string{})
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CheckHealth(w, r)
@@ -505,4 +525,117 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 
 	return r
+}
+
+// Base64 encoded, gzipped, json marshaled Swagger object
+var swaggerSpec = []string{
+
+	"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",
+	"pJ/8NwAA//8A20eU4y4AAA==",
+}
+
+// GetSwagger returns the content of the embedded swagger specification file
+// or error if failed to decode
+func decodeSpec() ([]byte, error) {
+	zipped, err := base64.StdEncoding.DecodeString(strings.Join(swaggerSpec, ""))
+	if err != nil {
+		return nil, fmt.Errorf("error base64 decoding spec: %w", err)
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(zipped))
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing spec: %w", err)
+	}
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(zr)
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing spec: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+var rawSpec = decodeSpecCached()
+
+// a naive cached of a decoded swagger spec
+func decodeSpecCached() func() ([]byte, error) {
+	data, err := decodeSpec()
+	return func() ([]byte, error) {
+		return data, err
+	}
+}
+
+// Constructs a synthetic filesystem for resolving external references when loading openapi specifications.
+func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
+	res := make(map[string]func() ([]byte, error))
+	if len(pathToFile) > 0 {
+		res[pathToFile] = rawSpec
+	}
+
+	return res
+}
+
+// GetSwagger returns the Swagger specification corresponding to the generated code
+// in this file. The external references of Swagger specification are resolved.
+// The logic of resolving external references is tightly connected to "import-mapping" feature.
+// Externally referenced files must be embedded in the corresponding golang packages.
+// Urls can be supported but this task was out of the scope.
+func GetSwagger() (swagger *openapi3.T, err error) {
+	resolvePath := PathToRawSpec("")
+
+	loader := openapi3.NewLoader()
+	loader.IsExternalRefsAllowed = true
+	loader.ReadFromURIFunc = func(loader *openapi3.Loader, url *url.URL) ([]byte, error) {
+		pathToFile := url.String()
+		pathToFile = path.Clean(pathToFile)
+		getSpec, ok := resolvePath[pathToFile]
+		if !ok {
+			err1 := fmt.Errorf("path not found: %s", pathToFile)
+			return nil, err1
+		}
+		return getSpec()
+	}
+	var specData []byte
+	specData, err = rawSpec()
+	if err != nil {
+		return
+	}
+	swagger, err = loader.LoadFromData(specData)
+	if err != nil {
+		return
+	}
+	return
 }

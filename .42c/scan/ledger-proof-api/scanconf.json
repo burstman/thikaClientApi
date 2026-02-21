@@ -1,0 +1,558 @@
+{
+  "version": "2.0.0",
+  "runtimeConfiguration": {
+    "environment": "default",
+    "laxTestingModeEnabled": false,
+    "apiConnectivityCheck": true,
+    "logLevel": "error",
+    "logDestination": "stdout+platform",
+    "logMaxFileSize": 2147483648,
+    "requestHeaderNameRequestId": "x-scan-request-id",
+    "requestHeaderNameScenarioId": "x-scan-scenario-id",
+    "requestHeaderNameRequestType": "x-scan-request-type",
+    "requestFlowrate": 100,
+    "requestTimeout": 30,
+    "requestTlsInsecureSkipVerify": true,
+    "responseFollowRedirection": false,
+    "responseMaxBodySizeScan": 10485760,
+    "happyPathOnly": false,
+    "maxRequestRetryAttempts": 5,
+    "maxScanDuration": 1800,
+    "memoryLimit": 2147483648,
+    "memoryTimeSpan": 10,
+    "reportMaxRequestSizeHappyPath": 8092,
+    "reportMaxRequestSizeTest": 8092,
+    "reportIncludeRequestBody": true,
+    "reportIncludeResponseBody": true,
+    "reportMaxHttpResponseSizeHappyPath": 8092,
+    "reportMaxBodySizeHappyPath": 8092,
+    "reportMaxHttpResponseSizeTest": 8092,
+    "reportMaxBodySizeTest": 8092,
+    "reportIssuesOnly": false,
+    "reportMaxIssues": 1000,
+    "reportMaxSize": 20971520,
+    "reportGenerateCurlCommand": true,
+    "normalizeServerUrls": true
+  },
+  "customizations": {
+    "happyPaths": {
+      "retry": 1,
+      "responsePolicy": {
+        "httpStatusExpected": true,
+        "mustBeConformant": true
+      },
+      "httpStatusExpected": []
+    },
+    "tests": {
+      "responsePolicy": {
+        "httpStatusExpected": true,
+        "mustBeConformant": true
+      }
+    }
+  },
+  "environments": {
+    "default": {
+      "variables": {
+        "apiKey": {
+          "name": "SCAN42C_SECURITY_APIKEY",
+          "from": "environment",
+          "required": false,
+          "default": "secret_to_be_overridden"
+        },
+        "bearerAuth": {
+          "name": "SCAN42C_SECURITY_BEARERAUTH",
+          "from": "environment",
+          "required": true
+        },
+        "host": {
+          "name": "SCAN42C_HOST",
+          "from": "environment",
+          "required": false,
+          "default": "http://localhost:8080"
+        }
+      }
+    }
+  },
+  "operations": {
+    "checkHealth": {
+      "operationId": "checkHealth",
+      "request": {
+        "operationId": "checkHealth",
+        "request": {
+          "type": "42c",
+          "details": {
+            "operationId": "checkHealth",
+            "method": "GET",
+            "url": "{{host}}/health"
+          }
+        },
+        "defaultResponse": "200",
+        "responses": {
+          "200": {
+            "expectations": {
+              "httpStatus": 200
+            }
+          }
+        }
+      },
+      "scenarios": [
+        {
+          "key": "happy.path",
+          "requests": [
+            {
+              "fuzzing": true,
+              "$ref": "#/operations/checkHealth/request"
+            }
+          ],
+          "fuzzing": true
+        }
+      ]
+    },
+    "createBusinessDataRecord": {
+      "operationId": "createBusinessDataRecord",
+      "request": {
+        "operationId": "createBusinessDataRecord",
+        "auth": [
+          "bearerAuth"
+        ],
+        "request": {
+          "type": "42c",
+          "details": {
+            "operationId": "createBusinessDataRecord",
+            "method": "POST",
+            "url": "{{host}}/records/business-data",
+            "headers": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "requestBody": {
+              "mode": "json",
+              "json": {
+                "businessData": {
+                  "shipmentId": "SH-99",
+                  "weight": 500
+                },
+                "recordId": "REC-001"
+              }
+            }
+          }
+        },
+        "defaultResponse": "201",
+        "responses": {
+          "201": {
+            "expectations": {
+              "httpStatus": 201
+            }
+          },
+          "400": {
+            "expectations": {
+              "httpStatus": 400
+            }
+          },
+          "401": {
+            "expectations": {
+              "httpStatus": 401
+            }
+          },
+          "409": {
+            "expectations": {
+              "httpStatus": 409
+            }
+          },
+          "500": {
+            "expectations": {
+              "httpStatus": 500
+            }
+          }
+        }
+      },
+      "scenarios": [
+        {
+          "key": "happy.path",
+          "requests": [
+            {
+              "fuzzing": true,
+              "$ref": "#/operations/createBusinessDataRecord/request"
+            }
+          ],
+          "fuzzing": true
+        }
+      ]
+    },
+    "createInvoiceRecord": {
+      "operationId": "createInvoiceRecord",
+      "request": {
+        "operationId": "createInvoiceRecord",
+        "auth": [
+          "bearerAuth"
+        ],
+        "request": {
+          "type": "42c",
+          "details": {
+            "operationId": "createInvoiceRecord",
+            "method": "POST",
+            "url": "{{host}}/records/invoice",
+            "headers": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "requestBody": {
+              "mode": "json",
+              "json": {
+                "filename": "invoice.xml",
+                "xmlBase64": "PD94bWwgdmVyc2lvbj0iMS4wIj8+CjxpbnZvaWNlPgogIDxpZD4xMjM8L2lkPgo8L2ludm9pY2U+"
+              }
+            }
+          }
+        },
+        "defaultResponse": "201",
+        "responses": {
+          "201": {
+            "expectations": {
+              "httpStatus": 201
+            }
+          },
+          "400": {
+            "expectations": {
+              "httpStatus": 400
+            }
+          },
+          "401": {
+            "expectations": {
+              "httpStatus": 401
+            }
+          },
+          "409": {
+            "expectations": {
+              "httpStatus": 409
+            }
+          },
+          "500": {
+            "expectations": {
+              "httpStatus": 500
+            }
+          }
+        }
+      },
+      "scenarios": [
+        {
+          "key": "happy.path",
+          "requests": [
+            {
+              "fuzzing": true,
+              "$ref": "#/operations/createInvoiceRecord/request"
+            }
+          ],
+          "fuzzing": true
+        }
+      ]
+    },
+    "getRecord": {
+      "operationId": "getRecord",
+      "request": {
+        "operationId": "getRecord",
+        "auth": [
+          "bearerAuth"
+        ],
+        "request": {
+          "type": "42c",
+          "details": {
+            "operationId": "getRecord",
+            "method": "GET",
+            "url": "{{host}}/records/{recordId}",
+            "paths": [
+              {
+                "key": "recordId",
+                "value": "hzqvdznrgndhmtidilsseyqhgjumgfdf"
+              }
+            ]
+          }
+        },
+        "defaultResponse": "200",
+        "responses": {
+          "200": {
+            "expectations": {
+              "httpStatus": 200
+            }
+          },
+          "401": {
+            "expectations": {
+              "httpStatus": 401
+            }
+          },
+          "404": {
+            "expectations": {
+              "httpStatus": 404
+            }
+          },
+          "500": {
+            "expectations": {
+              "httpStatus": 500
+            }
+          }
+        }
+      },
+      "scenarios": [
+        {
+          "key": "happy.path",
+          "requests": [
+            {
+              "fuzzing": true,
+              "$ref": "#/operations/getRecord/request"
+            }
+          ],
+          "fuzzing": true
+        }
+      ]
+    },
+    "getRecordHistory": {
+      "operationId": "getRecordHistory",
+      "request": {
+        "operationId": "getRecordHistory",
+        "auth": [
+          "bearerAuth"
+        ],
+        "request": {
+          "type": "42c",
+          "details": {
+            "operationId": "getRecordHistory",
+            "method": "GET",
+            "url": "{{host}}/records/{recordId}/history",
+            "paths": [
+              {
+                "key": "recordId",
+                "value": "kavtycpcxswnmruvcxpunqyygvmujjec"
+              }
+            ]
+          }
+        },
+        "defaultResponse": "200",
+        "responses": {
+          "200": {
+            "expectations": {
+              "httpStatus": 200
+            }
+          },
+          "401": {
+            "expectations": {
+              "httpStatus": 401
+            }
+          },
+          "404": {
+            "expectations": {
+              "httpStatus": 404
+            }
+          },
+          "500": {
+            "expectations": {
+              "httpStatus": 500
+            }
+          }
+        }
+      },
+      "scenarios": [
+        {
+          "key": "happy.path",
+          "requests": [
+            {
+              "fuzzing": true,
+              "$ref": "#/operations/getRecordHistory/request"
+            }
+          ],
+          "fuzzing": true
+        }
+      ]
+    },
+    "updateBusinessData": {
+      "operationId": "updateBusinessData",
+      "request": {
+        "operationId": "updateBusinessData",
+        "auth": [
+          "bearerAuth"
+        ],
+        "request": {
+          "type": "42c",
+          "details": {
+            "operationId": "updateBusinessData",
+            "method": "PUT",
+            "url": "{{host}}/records/{recordId}/business-data",
+            "headers": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "paths": [
+              {
+                "key": "recordId",
+                "value": "dmhkmjessaucwbitsomdptjaljydpail"
+              }
+            ],
+            "requestBody": {
+              "mode": "json",
+              "json": {
+                "businessData": {}
+              }
+            }
+          }
+        },
+        "defaultResponse": "200",
+        "responses": {
+          "200": {
+            "expectations": {
+              "httpStatus": 200
+            }
+          },
+          "400": {
+            "expectations": {
+              "httpStatus": 400
+            }
+          },
+          "401": {
+            "expectations": {
+              "httpStatus": 401
+            }
+          },
+          "403": {
+            "expectations": {
+              "httpStatus": 403
+            }
+          },
+          "404": {
+            "expectations": {
+              "httpStatus": 404
+            }
+          },
+          "500": {
+            "expectations": {
+              "httpStatus": 500
+            }
+          }
+        }
+      },
+      "scenarios": [
+        {
+          "key": "happy.path",
+          "requests": [
+            {
+              "fuzzing": true,
+              "$ref": "#/operations/updateBusinessData/request"
+            }
+          ],
+          "fuzzing": true
+        }
+      ]
+    },
+    "updateInvoiceRecord": {
+      "operationId": "updateInvoiceRecord",
+      "request": {
+        "operationId": "updateInvoiceRecord",
+        "auth": [
+          "bearerAuth"
+        ],
+        "request": {
+          "type": "42c",
+          "details": {
+            "operationId": "updateInvoiceRecord",
+            "method": "PUT",
+            "url": "{{host}}/records/{recordId}/invoice",
+            "headers": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "paths": [
+              {
+                "key": "recordId",
+                "value": "coeaqpihgtydczrmfxuklzuurokpfsoq"
+              }
+            ],
+            "requestBody": {
+              "mode": "json",
+              "json": {
+                "newFilename": "dfwvdntodygylthdfzzxykeltjxowmhj",
+                "newXmlBase64": "wkxeojqdczyavtycfvfvcvtokwktqffd"
+              }
+            }
+          }
+        },
+        "defaultResponse": "200",
+        "responses": {
+          "200": {
+            "expectations": {
+              "httpStatus": 200
+            }
+          },
+          "400": {
+            "expectations": {
+              "httpStatus": 400
+            }
+          },
+          "401": {
+            "expectations": {
+              "httpStatus": 401
+            }
+          },
+          "403": {
+            "expectations": {
+              "httpStatus": 403
+            }
+          },
+          "404": {
+            "expectations": {
+              "httpStatus": 404
+            }
+          },
+          "500": {
+            "expectations": {
+              "httpStatus": 500
+            }
+          }
+        }
+      },
+      "scenarios": [
+        {
+          "key": "happy.path",
+          "requests": [
+            {
+              "fuzzing": true,
+              "$ref": "#/operations/updateInvoiceRecord/request"
+            }
+          ],
+          "fuzzing": true
+        }
+      ]
+    }
+  },
+  "authenticationDetails": [
+    {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-KEY",
+        "default": "apiKey",
+        "credentials": {
+          "apiKey": {
+            "credential": "{{apiKey}}",
+            "description": "apiKey security"
+          }
+        }
+      },
+      "bearerAuth": {
+        "type": "bearer",
+        "default": "bearerAuth",
+        "credentials": {
+          "bearerAuth": {
+            "credential": "{{bearerAuth}}",
+            "description": "bearerAuth security"
+          }
+        }
+      }
+    }
+  ]
+}

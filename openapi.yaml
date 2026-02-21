@@ -5,12 +5,11 @@ info:
   version: "1.0.0"
 
 servers:
-  - url: http://localhost:8080
-    description: Local Development Server
+  - url: https://localhost:8080
+    description: Local Development Server (HTTPS required for security)
 
 # ----------------------------------------------------------------
 # GLOBAL SECURITY REQUIREMENT
-# Clients must provide EITHER a Bearer Token OR an API Key
 # ----------------------------------------------------------------
 security:
   - bearerAuth: []
@@ -20,8 +19,6 @@ paths:
   /health:
     get:
       summary: Health check
-      # Optional: You might want to disable auth for health checks
-      security: [] 
       operationId: checkHealth
       responses:
         "200":
@@ -30,10 +27,17 @@ paths:
             application/json:
               schema:
                 type: object
+                additionalProperties: false
                 properties:
                   status:
                     type: string
                     example: "UP"
+                    pattern: '^[A-Z]+$'
+                    maxLength: 10
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        default:
+          $ref: "#/components/responses/InternalServerError"
 
   # ----------------------------------------------------------------
   # 1. CREATE: GENERIC BUSINESS DATA
@@ -60,13 +64,23 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
         "409":
           description: Record already exists
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
+          $ref: "#/components/responses/InternalServerError"
+        default:
           $ref: "#/components/responses/InternalServerError"
 
   # ----------------------------------------------------------------
@@ -94,13 +108,23 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
         "409":
           description: Record already exists
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
+          $ref: "#/components/responses/InternalServerError"
+        default:
           $ref: "#/components/responses/InternalServerError"
 
   # ----------------------------------------------------------------
@@ -117,6 +141,9 @@ paths:
           description: The unique ID of the ledger record
           schema:
             type: string
+            pattern: '^[a-zA-Z0-9_-]+$'
+            minLength: 1
+            maxLength: 64
       responses:
         "200":
           description: Record found
@@ -126,9 +153,17 @@ paths:
                 $ref: "#/components/schemas/LedgerRecord"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
+          $ref: "#/components/responses/InternalServerError"
+        default:
           $ref: "#/components/responses/InternalServerError"
 
   # ----------------------------------------------------------------
@@ -144,6 +179,9 @@ paths:
           required: true
           schema:
             type: string
+            pattern: '^[a-zA-Z0-9_-]+$'
+            minLength: 1
+            maxLength: 64
       requestBody:
         required: true
         content:
@@ -165,7 +203,15 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
+          $ref: "#/components/responses/InternalServerError"
+        default:
           $ref: "#/components/responses/InternalServerError"
 
   # ----------------------------------------------------------------
@@ -181,6 +227,9 @@ paths:
           required: true
           schema:
             type: string
+            pattern: '^[a-zA-Z0-9_-]+$'
+            minLength: 1
+            maxLength: 64
       requestBody:
         required: true
         content:
@@ -202,7 +251,15 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
+          $ref: "#/components/responses/InternalServerError"
+        default:
           $ref: "#/components/responses/InternalServerError"
 
   # ----------------------------------------------------------------
@@ -218,6 +275,9 @@ paths:
           required: true
           schema:
             type: string
+            pattern: '^[a-zA-Z0-9_-]+$'
+            minLength: 1
+            maxLength: 64
       responses:
         "200":
           description: History entries retrieved
@@ -225,13 +285,22 @@ paths:
             application/json:
               schema:
                 type: array
+                maxItems: 1000
                 items:
                   $ref: "#/components/schemas/HistoryEntry"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
+          $ref: "#/components/responses/InternalServerError"
+        default:
           $ref: "#/components/responses/InternalServerError"
 
 components:
@@ -243,12 +312,12 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: "JWT Authorization header using the Bearer scheme. Example: 'Authorization: Bearer {token}'"
+      description: "JWT Authorization header using the Bearer scheme."
     apiKey:
       type: apiKey
       in: header
       name: X-API-KEY
-      description: "API Key Authentication. Example: 'X-API-KEY: {key}'"
+      description: "API Key Authentication."
 
   responses:
     BadRequest:
@@ -275,6 +344,24 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    NotAcceptable:
+      description: Not Acceptable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnsupportedMediaType:
+      description: Unsupported Media Type
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooManyRequests:
+      description: Too Many Requests
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     InternalServerError:
       description: Internal Server Error
       content:
@@ -285,6 +372,7 @@ components:
   schemas:
     Error:
       type: object
+      additionalProperties: false
       properties:
         code:
           type: integer
@@ -292,34 +380,52 @@ components:
         message:
           type: string
           example: "Invalid JSON format"
+          pattern: '^.+$'
+          maxLength: 500
 
     Actor:
       type: object
+      additionalProperties: false
       required:
         - orgMsp
         - userId
       properties:
         orgMsp:
           type: string
+          pattern: '^[a-zA-Z0-9]+$'
+          minLength: 1
+          maxLength: 32
         userId:
           type: string
+          pattern: '^[a-zA-Z0-9@._-]+$'
+          minLength: 1
+          maxLength: 64
 
     Status:
       type: object
+      additionalProperties: false
       required:
         - code
       properties:
         code:
           type: string
           example: "CREATED"
+          pattern: '^[A-Z_]+$'
+          minLength: 1
+          maxLength: 32
         note:
           type: string
+          pattern: '^.*$'
+          maxLength: 255
         updatedAt:
           type: string
           format: date-time
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$'
+          maxLength: 30
 
     LedgerRecord:
       type: object
+      additionalProperties: false
       required:
         - recordId
         - docType
@@ -330,14 +436,21 @@ components:
           type: string
           readOnly: true
           example: "LedgerRecord"
+          pattern: '^[a-zA-Z]+$'
+          maxLength: 32
         recordId:
           type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          minLength: 1
+          maxLength: 64
         actor:
           $ref: "#/components/schemas/Actor"
         createdAt:
           type: string
           format: date-time
           readOnly: true
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$'
+          maxLength: 30
         businessData:
           type: object
           additionalProperties: true
@@ -348,20 +461,29 @@ components:
           type: boolean
         lockedAt:
           type: string
-          format: date-time
+          pattern: '^$|^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$'
+          maxLength: 30
         lockPolicyId:
           type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          maxLength: 64
         policyVersion:
           type: integer
 
     HistoryEntry:
       type: object
+      additionalProperties: false
       properties:
         txId:
           type: string
+          pattern: '^[a-fA-F0-9]{64}$'
+          minLength: 64
+          maxLength: 64
         timestamp:
           type: string
           format: date-time
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$'
+          maxLength: 30
         value:
           $ref: "#/components/schemas/LedgerRecord"
         isDelete:
@@ -371,6 +493,7 @@ components:
 
     CreateBusinessDataRequest:
       type: object
+      additionalProperties: false
       required:
         - recordId
         - businessData
@@ -378,6 +501,9 @@ components:
         recordId:
           type: string
           example: "REC-001"
+          pattern: '^[a-zA-Z0-9_-]+$'
+          minLength: 1
+          maxLength: 64
         businessData:
           type: object
           additionalProperties: true
@@ -386,6 +512,7 @@ components:
 
     CreateInvoiceRequest:
       type: object
+      additionalProperties: false
       required:
         - recordId
         - filename
@@ -394,16 +521,26 @@ components:
         recordId:
           type: string
           example: "INV-2023-001"
+          pattern: '^[a-zA-Z0-9_-]+$'
+          minLength: 1
+          maxLength: 64
         filename:
           type: string
           example: "invoice.xml"
+          pattern: '^[\w,\s-]+\.[A-Za-z]{3,4}$'
+          minLength: 1
+          maxLength: 255
         xmlBase64:
           type: string
           description: Base64 encoded XML content
           example: "PD94bWwgdmVyc2lvbj0iMS4wIj8+CjxpbnZvaWNlPgogIDxpZD4xMjM8L2lkPgo8L2ludm9pY2U+"
+          pattern: '^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$'
+          minLength: 1
+          maxLength: 5242880 # Approx 5MB limit
 
     UpdateBusinessDataRequest:
       type: object
+      additionalProperties: false
       required:
         - businessData
       properties:
@@ -414,11 +551,18 @@ components:
 
     UpdateInvoiceRequest:
       type: object
+      additionalProperties: false
       required:
         - newFilename
         - newXmlBase64
       properties:
         newFilename:
           type: string
+          pattern: '^[\w,\s-]+\.[A-Za-z]{3,4}$'
+          minLength: 1
+          maxLength: 255
         newXmlBase64:
           type: string
+          pattern: '^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$'
+          minLength: 1
+          maxLength: 5242880
