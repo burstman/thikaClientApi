@@ -226,9 +226,55 @@ func main() {
 	router.Use(middleware.Recoverer)
 	router.Mount("/", handler)
 
+	router.Get("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		swagger, err := api.GetSwagger()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Disable authentication for the spec itself so the UI can load it
+		swagger.Servers = nil
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(swagger)
+	})
+
+	// 2. Serve Swagger UI
+	// This serves a simple HTML page that loads the Swagger UI assets from a CDN.
+	router.Get("/docs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(swaggerUIHTML))
+	})
+
 	log.Println("Go (Chi) REST Server listening on port 8080")
+	log.Println("✅ Swagger UI available at http://localhost:8080/docs")
 	http.ListenAndServe(":8080", router)
 }
+
+// This HTML loads the Swagger UI scripts from a CDN and points them to your /openapi.json
+const swaggerUIHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>API Documentation</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js" crossorigin></script>
+<script>
+  window.onload = () => {
+    window.ui = SwaggerUIBundle({
+      url: '/openapi.json', // Points to the JSON handler we defined above
+      dom_id: '#swagger-ui',
+    });
+  };
+</script>
+</body>
+</html>
+`
 
 // =================================================================================
 // FABRIC CONNECTION HELPER (NOW USES CONFIG)
