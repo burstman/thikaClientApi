@@ -128,43 +128,32 @@ paths:
           $ref: "#/components/responses/InternalServerError"
 
   # ----------------------------------------------------------------
-  # 3. READ: COMMON
+  # 3. READ: RECORD BY ID
   # ----------------------------------------------------------------
   /records/{recordId}:
     get:
-      summary: Get a ledger record by ID
+      summary: Get a ledger record (with optional history)
       operationId: getRecord
       parameters:
         - name: recordId
           in: path
           required: true
-          description: The unique ID of the ledger record
           schema:
             type: string
-            pattern: '^[a-zA-Z0-9_-]+$'
-            minLength: 1
-            maxLength: 64
+        # New Parameter to toggle history
+        - name: includeHistory
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: Record found
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LedgerRecord"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "406":
-          $ref: "#/components/responses/NotAcceptable"
-        "429":
-          $ref: "#/components/responses/TooManyRequests"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-        default:
-          $ref: "#/components/responses/InternalServerError"
+                $ref: "#/components/schemas/RecordResponse"
 
   # ----------------------------------------------------------------
   # 4. UPDATE: GENERIC BUSINESS DATA
@@ -262,46 +251,68 @@ paths:
         default:
           $ref: "#/components/responses/InternalServerError"
 
+
   # ----------------------------------------------------------------
-  # 6. HISTORY
+  # 7. SEARCH: BY DATE RANGE (PAGINATED)
   # ----------------------------------------------------------------
-  /records/{recordId}/history:
+  /records:
     get:
-      summary: Get history of a record
-      operationId: getRecordHistory
+      summary: Search records by date range
+      description: Retrieves a paginated list of records created within the specified date range.
+      operationId: getRecordsByDateRange
       parameters:
-        - name: recordId
-          in: path
+        - name: start
+          in: query
           required: true
+          description: Start date (RFC3339 format, e.g., 2023-01-01T00:00:00Z)
           schema:
             type: string
-            pattern: '^[a-zA-Z0-9_-]+$'
-            minLength: 1
-            maxLength: 64
+            format: date-time
+            pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$'
+        - name: end
+          in: query
+          required: true
+          description: End date (RFC3339 format)
+          schema:
+            type: string
+            format: date-time
+            pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$'
+        - name: pageSize
+          in: query
+          required: false
+          description: Number of records to return per page (default 10)
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: bookmark
+          in: query
+          required: false
+          description: Bookmark for the next page of results
+          schema:
+            type: string
+            pattern: '^[a-zA-Z0-9_.-]*$'
       responses:
         "200":
-          description: History entries retrieved
+          description: Records retrieved successfully
           content:
             application/json:
               schema:
-                type: array
-                maxItems: 1000
-                items:
-                  $ref: "#/components/schemas/HistoryEntry"
+                $ref: "#/components/schemas/PaginatedResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "406":
-          $ref: "#/components/responses/NotAcceptable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalServerError"
         default:
           $ref: "#/components/responses/InternalServerError"
+
 
 components:
   # ----------------------------------------------------------------
@@ -370,6 +381,40 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+
+    RecordResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/LedgerRecord"
+        history:
+          type: array
+          description: "Only populated if includeHistory=true"
+          items:
+            $ref: "#/components/schemas/HistoryEntry"
+
+    PaginatedResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - records
+        - recordsCount
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerRecord"
+        bookmark:
+          type: string
+          description: The marker for the next page of results. Pass this in the next request to fetch the next page.
+          example: "g1AAAAB..."
+        recordsCount:
+          type: integer
+          description: The number of records returned in this batch
+          example: 10
+
     Error:
       type: object
       additionalProperties: false

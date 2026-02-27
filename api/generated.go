@@ -77,6 +77,24 @@ type LedgerRecord struct {
 	Status        Status                  `json:"status"`
 }
 
+// PaginatedResponse defines model for PaginatedResponse.
+type PaginatedResponse struct {
+	// Bookmark The marker for the next page of results. Pass this in the next request to fetch the next page.
+	Bookmark *string        `json:"bookmark,omitempty"`
+	Records  []LedgerRecord `json:"records"`
+
+	// RecordsCount The number of records returned in this batch
+	RecordsCount int `json:"recordsCount"`
+}
+
+// RecordResponse defines model for RecordResponse.
+type RecordResponse struct {
+	Data LedgerRecord `json:"data"`
+
+	// History Only populated if includeHistory=true
+	History *[]HistoryEntry `json:"history,omitempty"`
+}
+
 // Status defines model for Status.
 type Status struct {
 	Code      string     `json:"code"`
@@ -120,6 +138,26 @@ type Unauthorized = Error
 // UnsupportedMediaType defines model for UnsupportedMediaType.
 type UnsupportedMediaType = Error
 
+// GetRecordsByDateRangeParams defines parameters for GetRecordsByDateRange.
+type GetRecordsByDateRangeParams struct {
+	// Start Start date (RFC3339 format, e.g., 2023-01-01T00:00:00Z)
+	Start time.Time `form:"start" json:"start"`
+
+	// End End date (RFC3339 format)
+	End time.Time `form:"end" json:"end"`
+
+	// PageSize Number of records to return per page (default 10)
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+
+	// Bookmark Bookmark for the next page of results
+	Bookmark *string `form:"bookmark,omitempty" json:"bookmark,omitempty"`
+}
+
+// GetRecordParams defines parameters for GetRecord.
+type GetRecordParams struct {
+	IncludeHistory *bool `form:"includeHistory,omitempty" json:"includeHistory,omitempty"`
+}
+
 // CreateBusinessDataRecordJSONRequestBody defines body for CreateBusinessDataRecord for application/json ContentType.
 type CreateBusinessDataRecordJSONRequestBody = CreateBusinessDataRequest
 
@@ -137,21 +175,21 @@ type ServerInterface interface {
 	// Health check
 	// (GET /health)
 	CheckHealth(w http.ResponseWriter, r *http.Request)
+	// Search records by date range
+	// (GET /records)
+	GetRecordsByDateRange(w http.ResponseWriter, r *http.Request, params GetRecordsByDateRangeParams)
 	// Create a record with generic business data
 	// (POST /records/business-data)
 	CreateBusinessDataRecord(w http.ResponseWriter, r *http.Request)
 	// Create an Invoice record
 	// (POST /records/invoice)
 	CreateInvoiceRecord(w http.ResponseWriter, r *http.Request)
-	// Get a ledger record by ID
+	// Get a ledger record (with optional history)
 	// (GET /records/{recordId})
-	GetRecord(w http.ResponseWriter, r *http.Request, recordId string)
+	GetRecord(w http.ResponseWriter, r *http.Request, recordId string, params GetRecordParams)
 	// Update business data of a generic record
 	// (PUT /records/{recordId}/business-data)
 	UpdateBusinessData(w http.ResponseWriter, r *http.Request, recordId string)
-	// Get history of a record
-	// (GET /records/{recordId}/history)
-	GetRecordHistory(w http.ResponseWriter, r *http.Request, recordId string)
 	// Update an existing Invoice record
 	// (PUT /records/{recordId}/invoice)
 	UpdateInvoiceRecord(w http.ResponseWriter, r *http.Request, recordId string)
@@ -167,6 +205,12 @@ func (_ Unimplemented) CheckHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Search records by date range
+// (GET /records)
+func (_ Unimplemented) GetRecordsByDateRange(w http.ResponseWriter, r *http.Request, params GetRecordsByDateRangeParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Create a record with generic business data
 // (POST /records/business-data)
 func (_ Unimplemented) CreateBusinessDataRecord(w http.ResponseWriter, r *http.Request) {
@@ -179,21 +223,15 @@ func (_ Unimplemented) CreateInvoiceRecord(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Get a ledger record by ID
+// Get a ledger record (with optional history)
 // (GET /records/{recordId})
-func (_ Unimplemented) GetRecord(w http.ResponseWriter, r *http.Request, recordId string) {
+func (_ Unimplemented) GetRecord(w http.ResponseWriter, r *http.Request, recordId string, params GetRecordParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // Update business data of a generic record
 // (PUT /records/{recordId}/business-data)
 func (_ Unimplemented) UpdateBusinessData(w http.ResponseWriter, r *http.Request, recordId string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// Get history of a record
-// (GET /records/{recordId}/history)
-func (_ Unimplemented) GetRecordHistory(w http.ResponseWriter, r *http.Request, recordId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -222,6 +260,76 @@ func (siw *ServerInterfaceWrapper) CheckHealth(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CheckHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// GetRecordsByDateRange operation middleware
+func (siw *ServerInterfaceWrapper) GetRecordsByDateRange(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	ctx = context.WithValue(ctx, ApiKeyScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetRecordsByDateRangeParams
+
+	// ------------- Required query parameter "start" -------------
+
+	if paramValue := r.URL.Query().Get("start"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "start"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "start", r.URL.Query(), &params.Start)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "start", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "end" -------------
+
+	if paramValue := r.URL.Query().Get("end"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "end"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "end", r.URL.Query(), &params.End)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "end", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "pageSize", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "bookmark" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "bookmark", r.URL.Query(), &params.Bookmark)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bookmark", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRecordsByDateRange(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -288,8 +396,19 @@ func (siw *ServerInterfaceWrapper) GetRecord(w http.ResponseWriter, r *http.Requ
 
 	ctx = context.WithValue(ctx, ApiKeyScopes, []string{})
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetRecordParams
+
+	// ------------- Optional query parameter "includeHistory" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "includeHistory", r.URL.Query(), &params.IncludeHistory)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "includeHistory", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRecord(w, r, recordId)
+		siw.Handler.GetRecord(w, r, recordId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -320,36 +439,6 @@ func (siw *ServerInterfaceWrapper) UpdateBusinessData(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateBusinessData(w, r, recordId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r.WithContext(ctx))
-}
-
-// GetRecordHistory operation middleware
-func (siw *ServerInterfaceWrapper) GetRecordHistory(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var err error
-
-	// ------------- Path parameter "recordId" -------------
-	var recordId string
-
-	err = runtime.BindStyledParameterWithLocation("simple", false, "recordId", runtime.ParamLocationPath, chi.URLParam(r, "recordId"), &recordId)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "recordId", Err: err})
-		return
-	}
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	ctx = context.WithValue(ctx, ApiKeyScopes, []string{})
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRecordHistory(w, r, recordId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -506,6 +595,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/health", wrapper.CheckHealth)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/records", wrapper.GetRecordsByDateRange)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/records/business-data", wrapper.CreateBusinessDataRecord)
 	})
 	r.Group(func(r chi.Router) {
@@ -518,9 +610,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/records/{recordId}/business-data", wrapper.UpdateBusinessData)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/records/{recordId}/history", wrapper.GetRecordHistory)
-	})
-	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/records/{recordId}/invoice", wrapper.UpdateInvoiceRecord)
 	})
 
@@ -530,42 +619,48 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"pJ/8NwAA//8A20eU4y4AAA==",
+	"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",
+	"d8PdcPF8OP9vAAAA////i3UgyDIAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

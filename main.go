@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"slices"
 	"thika-client/api"
 	"time"
 
@@ -20,6 +20,46 @@ import (
 	"google.golang.org/grpc/credentials"
 	// Import your generated API package
 )
+
+//Api key
+
+const ServerAPIKey = "my-super-secret-and-long-api-key-12345"
+
+// ApiKeyAuthMiddleware checks for a valid API key in the 'X-API-KEY' header.
+func ApiKeyAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Some endpoints, like /health or /docs, might not need authentication.
+		// We can create a list of public paths.
+		publicPaths := []string{"/health", "/docs", "/openapi.json"}
+		if slices.Contains(publicPaths, r.URL.Path) {
+			next.ServeHTTP(w, r) // It's a public path, so skip the check.
+			return
+		}
+
+		// Get the key from the request header.
+		providedKey := r.Header.Get("X-API-KEY")
+
+		// Check if the key is missing.
+		if providedKey == "" {
+			log.Println("🚫 API Key missing")
+			http.Error(w, "Unauthorized: API Key is missing", http.StatusUnauthorized)
+			return
+		}
+
+		// Validate the key.
+		// NOTE: In a real app, you would use a constant-time comparison function
+		// to prevent timing attacks, but this is fine for now.
+		if providedKey != ServerAPIKey {
+			log.Println("🚫 Invalid API Key provided")
+			http.Error(w, "Unauthorized: Invalid API Key", http.StatusUnauthorized)
+			return
+		}
+
+		log.Println("✅ API Key validated successfully")
+		// If the key is valid, call the next handler in the chain.
+		next.ServeHTTP(w, r)
+	})
+}
 
 // ApiServer holds the Fabric contract and implements the generated ServerInterface.
 type ApiServer struct {
@@ -65,135 +105,6 @@ func LoadConfig() (*Config, error) {
 	return config, nil
 }
 
-// CreateInvoiceRecord is our implementation for the Chi interface.
-func (s *ApiServer) CreateInvoiceRecord(w http.ResponseWriter, r *http.Request) {
-	// The generated code will handle validation. We just need to decode the body.
-	var req api.CreateInvoiceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	log.Printf("--> Submitting Transaction: CreateInvoiceRecord, ID: %s", req.RecordId)
-
-	// Use the Fabric SDK to submit the transaction
-	_, err := s.Contract.SubmitTransaction("CreateInvoiceRecord", req.RecordId, req.Filename, req.XmlBase64)
-	if err != nil {
-		// In production, parse the error for specific Fabric error types
-		http.Error(w, "Failed to submit transaction: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("<-- Transaction Committed: CreateInvoiceRecord, ID: %s", req.RecordId)
-
-	// Manually set the header and encode the JSON response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":  "Invoice record created",
-		"recordId": req.RecordId,
-	})
-}
-
-// Implement other interface methods here...
-func (s *ApiServer) CheckHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "UP"})
-}
-
-// GetRecord demonstrates reading a path parameter.
-func (s *ApiServer) GetRecord(w http.ResponseWriter, r *http.Request, recordId string) {
-	log.Printf("--> Evaluating Transaction: GetRecord, ID: %s", recordId)
-
-	// Use EvaluateTransaction for read-only queries
-	result, err := s.Contract.EvaluateTransaction("GetRecord", recordId)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to evaluate transaction: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("<-- Transaction Evaluated: GetRecord, ID: %s", recordId)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(result) // The result from chaincode is already JSON
-}
-
-// CreateBusinessDataRecord implements the POST /records/business-data endpoint
-// CreateBusinessDataRecord implements the POST /records/business-data endpoint
-func (s *ApiServer) CreateBusinessDataRecord(w http.ResponseWriter, r *http.Request) {
-	// 1. Decode the incoming request, which should only contain business data.
-	var businessData any
-	if err := json.NewDecoder(r.Body).Decode(&businessData); err != nil {
-		log.Printf("❌ Error decoding JSON: %v", err)
-		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// 2. Marshal the business data back into a JSON string for the chaincode.
-	businessDataBytes, err := json.Marshal(businessData)
-	if err != nil {
-		// This should rarely happen if the initial decoding worked, but it's good practice.
-		log.Printf("❌ Error re-marshaling business data: %v", err)
-		http.Error(w, "Invalid businessData format in request: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	businessDataString := string(businessDataBytes)
-
-	// --- END: MODIFICATION ---
-
-	log.Printf("--> Submitting Transaction: CreateBusinessDataRecord")
-
-	// 3. Submit the transaction with the single, correct argument.
-	// The result will be the JSON bytes of the LedgerRecord created by the chaincode.
-	resultBytes, err := s.Contract.SubmitTransaction(
-		"CreateBusinessDataRecord",
-		businessDataString, // Pass the guaranteed JSON string
-	)
-
-	// 3. IMPROVED: Handle specific chaincode errors
-	if err != nil {
-		log.Printf("❌ Failed to submit transaction: %v", err)
-		// Check the error message from the chaincode to return a better HTTP status
-		if strings.Contains(err.Error(), "already exists") {
-			http.Error(w, err.Error(), http.StatusConflict) // 409 Conflict
-		} else if strings.Contains(err.Error(), "authorization failed") {
-			http.Error(w, err.Error(), http.StatusForbidden) // 403 Forbidden
-		} else {
-			// For all other errors, return a generic server error
-			http.Error(w, "Failed to submit transaction: "+err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-	// 4. Unmarshal the response from the chaincode to get the new record.
-	var newRecord api.LedgerRecord // Assuming you have this struct defined in your API package
-	if err := json.Unmarshal(resultBytes, &newRecord); err != nil {
-		log.Printf("❌ Error unmarshaling chaincode response: %v", err)
-		http.Error(w, "Failed to parse chaincode response: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("<-- Transaction Committed: CreateBusinessDataRecord, RecordID: %s", newRecord.RecordId)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	response := map[string]string{
-		"message":  "Business data record created successfully",
-		"recordId": newRecord.RecordId,
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("❌ Error encoding response: %v", err)
-	}
-}
-
-func (s *ApiServer) UpdateBusinessData(w http.ResponseWriter, r *http.Request, recordId string) { /* ... */
-}
-func (s *ApiServer) GetRecordHistory(w http.ResponseWriter, r *http.Request, recordId string) { /* ... */
-}
-func (s *ApiServer) UpdateInvoiceRecord(w http.ResponseWriter, r *http.Request, recordId string) { /* ... */
-}
-
 func main() {
 
 	// Load configuration from .env file or environment
@@ -224,6 +135,7 @@ func main() {
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
+	router.Use(ApiKeyAuthMiddleware)
 	router.Mount("/", handler)
 
 	router.Get("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
